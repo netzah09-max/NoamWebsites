@@ -1,0 +1,1 @@
+ALTER TABLE public.requests ALTER COLUMN email DROP NOT NULL;
