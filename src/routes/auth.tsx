@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 
+const appBasePath = import.meta.env.BASE_URL;
+
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
   head: () => ({ meta: [{ title: "Admin sign in — NoamWebsites" }] }),
@@ -28,7 +30,11 @@ function AuthPage() {
     setLoading(true);
     const fn = mode === "signin"
       ? supabase.auth.signInWithPassword({ email, password })
-      : supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/admin` } });
+      : supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: new URL("admin", `${window.location.origin}${appBasePath}`).toString() },
+        });
     const { error } = await fn;
     setLoading(false);
     if (error) return setError(error.message);
