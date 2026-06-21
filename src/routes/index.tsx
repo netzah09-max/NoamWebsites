@@ -7,9 +7,6 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-const DISCORD_WEBHOOK_URL =
-  "https://discord.com/api/webhooks/1509598687959978148/tWABJSw1qZiqKIquS9G1xwayu929_XoN7qzoMkKHnVnPsRdXjM1VNkx-nBMmdjfzFArM";
-
 async function notifyDiscord(data: {
   fullName: string;
   phone: string;
@@ -17,23 +14,10 @@ async function notifyDiscord(data: {
   plan: string;
   description: string;
 }) {
-  const embed = {
-    title: "🚀 New NoamWebsites Request",
-    color: 0x7c3aed,
-    fields: [
-      { name: "Name", value: data.fullName || "—", inline: true },
-      { name: "Phone", value: data.phone || "—", inline: true },
-      { name: "Need", value: data.need || "—", inline: true },
-      { name: "Plan", value: data.plan || "—", inline: true },
-      { name: "Description", value: data.description?.slice(0, 1000) || "—" },
-    ],
-    timestamp: new Date().toISOString(),
-  };
-  await fetch(DISCORD_WEBHOOK_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ embeds: [embed] }),
+  const { error } = await supabase.functions.invoke("discord-request", {
+    body: data,
   });
+  if (error) throw error;
 }
 
 export const Route = createFileRoute("/")({
