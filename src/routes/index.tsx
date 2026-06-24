@@ -27,6 +27,60 @@ export const Route = createFileRoute("/")({
 type Lang = "en" | "he" | "ar" | "ru";
 const RTL: Lang[] = ["he", "ar"];
 const OWNER_EMAIL = "netzah09@gmail.com";
+const MAX_REVIEW_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_INLINE_REVIEW_IMAGE_BYTES = 450 * 1024;
+const MIGRATION_TEST_REVIEW_ID = "b7baa533-f6bf-4b31-8430-43b57cba2c6c";
+
+async function fileToDataUrl(file: Blob): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function loadImage(file: File): Promise<HTMLImageElement> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    return await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Could not read image."));
+      image.src = objectUrl;
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function createInlineReviewImage(file: File): Promise<string> {
+  const image = await loadImage(file);
+  let maxDimension = 1280;
+  let quality = 0.82;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Could not process image.");
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/webp", quality),
+    );
+    if (blob && blob.size <= MAX_INLINE_REVIEW_IMAGE_BYTES) {
+      return fileToDataUrl(blob);
+    }
+
+    quality = Math.max(0.45, quality - 0.08);
+    if (attempt >= 3) maxDimension = Math.max(640, Math.round(maxDimension * 0.82));
+  }
+
+  throw new Error("Image could not be compressed enough.");
+}
 
 function Index() {
   const [lang, setLang] = useState<Lang>("he");
@@ -53,11 +107,13 @@ function Index() {
   const [reviewImagePreview, setReviewImagePreview] = useState<string | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewPosted, setReviewPosted] = useState(false);
 
   const loadReviews = async () => {
     const { data } = await supabase
       .from("reviews")
       .select("id, name, rating, content, image_url, created_at")
+      .neq("id", MIGRATION_TEST_REVIEW_ID)
       .order("created_at", { ascending: false })
       .limit(50);
     if (data) setReviews(data as ReviewRow[]);
@@ -69,34 +125,51 @@ function Index() {
     e.preventDefault();
     setReviewSubmitting(true);
     setReviewError(null);
-    let image_url: string | null = null;
-    if (reviewImage) {
-      if (reviewImage.size > 5 * 1024 * 1024) {
-        setReviewSubmitting(false);
-        setReviewError(rl.imageTooLarge);
-        return;
+    setReviewPosted(false);
+
+    try {
+      let image_url: string | null = null;
+      if (reviewImage) {
+        if (reviewImage.size > MAX_REVIEW_IMAGE_BYTES) {
+          setReviewError(rl.imageTooLarge);
+          return;
+        }
+
+        const inlineImage = await createInlineReviewImage(reviewImage);
+        const ext = reviewImage.name.split(".").pop()?.toLowerCase() || "jpg";
+        const path = `${crypto.randomUUID()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("review-images")
+          .upload(path, reviewImage, { contentType: reviewImage.type, upsert: false });
+
+        if (uploadError) {
+          console.warn("Review image storage unavailable; using inline image.", uploadError);
+          image_url = inlineImage;
+        } else {
+          const { data: publicImage } = supabase.storage.from("review-images").getPublicUrl(path);
+          image_url = publicImage.publicUrl;
+        }
       }
-      const ext = reviewImage.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("review-images")
-        .upload(path, reviewImage, { contentType: reviewImage.type, upsert: false });
-      if (upErr) { setReviewSubmitting(false); setReviewError(upErr.message); return; }
-      const { data: pub } = supabase.storage.from("review-images").getPublicUrl(path);
-      image_url = pub.publicUrl;
+
+      const { error } = await supabase.from("reviews").insert({
+        name: reviewForm.name.trim(),
+        rating: reviewForm.rating,
+        content: reviewForm.content.trim(),
+        image_url,
+      });
+      if (error) throw error;
+
+      setReviewForm({ name: "", rating: 5, content: "" });
+      setReviewImage(null);
+      if (reviewImagePreview) URL.revokeObjectURL(reviewImagePreview);
+      setReviewImagePreview(null);
+      setReviewPosted(true);
+      await loadReviews();
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Could not post review.");
+    } finally {
+      setReviewSubmitting(false);
     }
-    const { error } = await supabase.from("reviews").insert({
-      name: reviewForm.name.trim(),
-      rating: reviewForm.rating,
-      content: reviewForm.content.trim(),
-      image_url,
-    });
-    setReviewSubmitting(false);
-    if (error) { setReviewError(error.message); return; }
-    setReviewForm({ name: "", rating: 5, content: "" });
-    setReviewImage(null);
-    setReviewImagePreview(null);
-    loadReviews();
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -489,6 +562,17 @@ function Index() {
               {reviewSubmitting ? "..." : rl.submit}
             </Button>
             {reviewError && <p className="text-center text-sm text-destructive">{reviewError}</p>}
+            {reviewPosted && (
+              <p className="text-center text-sm text-primary">
+                {lang === "he"
+                  ? "הביקורת שלך פורסמה."
+                  : lang === "ar"
+                    ? "تم نشر تقييمك."
+                    : lang === "ru"
+                      ? "Ваш отзыв опубликован."
+                      : "Your review was posted."}
+              </p>
+            )}
           </form>
 
           <div className="mt-12 space-y-4">
