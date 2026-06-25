@@ -205,21 +205,6 @@ function Index() {
     setSubmitError(null);
 
     try {
-      const { error } = await supabase
-        .from("requests")
-        .upsert(
-          {
-            id: requestId,
-            full_name: form.fullName,
-            phone: form.phone,
-            need: form.need,
-            plan: form.plan,
-            description: form.description,
-          },
-          { onConflict: "id", ignoreDuplicates: true },
-        );
-      if (error) throw error;
-
       await notifyDiscord({
         requestId,
         fullName: form.fullName,
