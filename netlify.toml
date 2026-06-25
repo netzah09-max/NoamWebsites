@@ -2,6 +2,14 @@
   command = "bun run build"
   publish = "dist/client"
 
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/requests"
+  to = "/.netlify/functions/discord-request"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/_shell.html"
