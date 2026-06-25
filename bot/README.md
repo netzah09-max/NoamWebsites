@@ -13,29 +13,7 @@ Supabase Edge Functions.
 3. Set `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID` as private host
    environment variables. Never commit the token.
 
-## Netlify Function deployment
-
-The production API can run as the Netlify Function in
-`netlify/functions/discord-request.cjs`. It uses TheBoys Bot only for Discord
-authentication and posts into the configured channel.
-
-```bash
-npx netlify login
-npx netlify env:set DISCORD_BOT_TOKEN
-npx netlify env:set DISCORD_CHANNEL_ID 1508012388601958481
-npx netlify deploy --prod
-```
-
-Set the website build variable to the resulting Netlify site URL:
-
-```env
-VITE_REQUEST_BOT_API_URL=https://your-site.netlify.app
-```
-
-The website sends requests to `/requests`, which Netlify routes to the
-function.
-
-## Optional local Node server
+## Run the bot API
 
 ```bash
 cd bot
@@ -43,8 +21,10 @@ npm install
 npm start
 ```
 
-The host must expose the configured `PORT` through HTTPS. Put that public URL
-in the website build variable:
+GitHub stores this source code, but GitHub Pages cannot run a persistent Node
+server or safely store the bot token. When a private Node host is available,
+expose the configured `PORT` through HTTPS and put that public URL in the
+website build variable:
 
 ```env
 VITE_REQUEST_BOT_API_URL=https://your-bot-host.example.com
