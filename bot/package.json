@@ -11,11 +11,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "dotenv": "^16.4.7",
-    "localtunnel": "^2.0.2"
-  },
-  "overrides": {
-    "axios": "^1.12.2"
+    "dotenv": "^16.4.7"
   },
   "engines": {
     "node": ">=20"

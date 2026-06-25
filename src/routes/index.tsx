@@ -8,6 +8,27 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 
 const REQUEST_BOT_API_URL = import.meta.env.VITE_REQUEST_BOT_API_URL?.replace(/\/$/, "");
+const REQUEST_BOT_ENDPOINT_FILE =
+  "https://raw.githubusercontent.com/netzah09-max/NoamWebsites/dist/bot-endpoint.json";
+
+async function getRequestBotApiUrl() {
+  try {
+    const response = await fetch(
+      `${REQUEST_BOT_ENDPOINT_FILE}?v=${Date.now()}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) throw new Error("Could not read the bot endpoint.");
+
+    const data = await response.json();
+    if (typeof data.url !== "string" || !data.url.startsWith("https://")) {
+      throw new Error("The bot endpoint is invalid.");
+    }
+    return data.url.replace(/\/$/, "");
+  } catch {
+    if (REQUEST_BOT_API_URL) return REQUEST_BOT_API_URL;
+    throw new Error("The NoamWebsites bot API is not configured.");
+  }
+}
 
 async function notifyDiscord(data: {
   requestId: string;
@@ -17,11 +38,9 @@ async function notifyDiscord(data: {
   plan: string;
   description: string;
 }) {
-  if (!REQUEST_BOT_API_URL) {
-    throw new Error("The NoamWebsites bot API is not configured.");
-  }
+  const requestBotApiUrl = await getRequestBotApiUrl();
 
-  const response = await fetch(`${REQUEST_BOT_API_URL}/requests`, {
+  const response = await fetch(`${requestBotApiUrl}/requests`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
