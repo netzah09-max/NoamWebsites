@@ -7,10 +7,15 @@
   "type": "commonjs",
   "scripts": {
     "start": "node index.js",
+    "tunnel": "node tunnel.js",
     "test": "node --test"
   },
   "dependencies": {
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "localtunnel": "^2.0.2"
+  },
+  "overrides": {
+    "axios": "^1.12.2"
   },
   "engines": {
     "node": ">=20"
