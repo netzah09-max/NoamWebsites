@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const REQUEST_BOT_API_URL = import.meta.env.VITE_REQUEST_BOT_API_URL?.replace(/\/$/, "");
 const REQUEST_BOT_ENDPOINT_FILE =
-  "https://raw.githubusercontent.com/netzah09-max/NoamWebsites/dist/bot-endpoint.json";
+  "https://api.github.com/repos/netzah09-max/NoamWebsites/contents/bot-endpoint.json?ref=dist";
 
 async function getRequestBotApiUrl() {
   try {
@@ -19,7 +19,11 @@ async function getRequestBotApiUrl() {
     );
     if (!response.ok) throw new Error("Could not read the bot endpoint.");
 
-    const data = await response.json();
+    const file = await response.json();
+    if (typeof file.content !== "string") {
+      throw new Error("The bot endpoint file is invalid.");
+    }
+    const data = JSON.parse(atob(file.content.replace(/\s/g, "")));
     if (typeof data.url !== "string" || !data.url.startsWith("https://")) {
       throw new Error("The bot endpoint is invalid.");
     }
