@@ -1,0 +1,18 @@
+{
+  "name": "noamwebsites-discord-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Receives NoamWebsites contact requests and posts persistent Discord bot messages.",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -7,17 +7,29 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
+const REQUEST_BOT_API_URL = import.meta.env.VITE_REQUEST_BOT_API_URL?.replace(/\/$/, "");
+
 async function notifyDiscord(data: {
+  requestId: string;
   fullName: string;
   phone: string;
   need: string;
   plan: string;
   description: string;
 }) {
-  const { error } = await supabase.functions.invoke("discord-request", {
-    body: data,
+  if (!REQUEST_BOT_API_URL) {
+    throw new Error("The NoamWebsites bot API is not configured.");
+  }
+
+  const response = await fetch(`${REQUEST_BOT_API_URL}/requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
   });
-  if (error) throw error;
+  if (!response.ok) {
+    const result = await response.json().catch(() => null);
+    throw new Error(result?.error || "The NoamWebsites bot could not send the request.");
+  }
 }
 
 export const Route = createFileRoute("/")({
@@ -97,6 +109,7 @@ function Index() {
   const [form, setForm] = useState({
     fullName: "", phone: "", need: "website", plan: "starter", description: "",
   });
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -190,31 +203,41 @@ function Index() {
     e.preventDefault();
     setSubmitting(true);
     setSubmitError(null);
-    const { error } = await supabase.from("requests").insert({
-      full_name: form.fullName,
-      phone: form.phone,
-      need: form.need,
-      plan: form.plan,
-      description: form.description,
-    });
-    setSubmitting(false);
-    if (error) {
-      setSubmitError(error.message);
-      return;
-    }
+
     try {
+      const { error } = await supabase
+        .from("requests")
+        .upsert(
+          {
+            id: requestId,
+            full_name: form.fullName,
+            phone: form.phone,
+            need: form.need,
+            plan: form.plan,
+            description: form.description,
+          },
+          { onConflict: "id", ignoreDuplicates: true },
+        );
+      if (error) throw error;
+
       await notifyDiscord({
+        requestId,
         fullName: form.fullName,
         phone: form.phone,
         need: form.need,
         plan: form.plan,
         description: form.description,
       });
-    } catch (e) {
-      console.error("Discord notify failed:", e);
+
+      setRequestId(crypto.randomUUID());
+      setForm({ fullName: "", phone: "", need: "website", plan: "starter", description: "" });
+      navigate({ to: "/thanks", search: { lang } });
+    } catch (error) {
+      console.error("Request submission failed:", error);
+      setSubmitError(error instanceof Error ? error.message : "Could not send your request.");
+    } finally {
+      setSubmitting(false);
     }
-    setForm({ fullName: "", phone: "", need: "website", plan: "starter", description: "" });
-    navigate({ to: "/thanks", search: { lang } });
   };
 
   return (
