@@ -16,6 +16,7 @@ dist-ssr
 .nitro
 *.local
 /bot/.env
+/bot/bot.pid
 /bot/tunnel.pid
 
 # Wrangler / Cloudflare
