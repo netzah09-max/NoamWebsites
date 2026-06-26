@@ -106,6 +106,8 @@ const OWNER_EMAIL = "netzah09@gmail.com";
 const MAX_REVIEW_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_INLINE_REVIEW_IMAGE_BYTES = 450 * 1024;
 const MIGRATION_TEST_REVIEW_ID = "b7baa533-f6bf-4b31-8430-43b57cba2c6c";
+const PHONE_NUMBER_PATTERN = /^05\d{8}$/;
+const PHONE_NUMBER_ERROR = "Phone number must be exactly 10 digits and start with 05.";
 
 async function fileToDataUrl(file: Blob): Promise<string> {
   return await new Promise((resolve, reject) => {
@@ -265,8 +267,14 @@ function Index() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitting(true);
     setSubmitError(null);
+
+    if (!PHONE_NUMBER_PATTERN.test(form.phone)) {
+      setSubmitError(PHONE_NUMBER_ERROR);
+      return;
+    }
+
+    setSubmitting(true);
 
     try {
       await notifyDiscord({
@@ -501,7 +509,19 @@ function Index() {
               <input required value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} className={inputCls} placeholder={t.placeholders.name} />
             </Field>
             <Field label={`${t.formPhone} *`}>
-              <input required type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} placeholder="+05" />
+              <input
+                required
+                type="tel"
+                inputMode="numeric"
+                pattern="05[0-9]{8}"
+                minLength={10}
+                maxLength={10}
+                title={PHONE_NUMBER_ERROR}
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                className={inputCls}
+                placeholder="0500000000"
+              />
             </Field>
             <Field label={t.formNeed}>
               <div className="grid grid-cols-2 gap-2">
