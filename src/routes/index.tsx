@@ -34,6 +34,46 @@ async function getRequestBotApiUrl() {
   }
 }
 
+class RequestBotError extends Error {
+  status?: number;
+}
+
+async function postRequestToBot(requestBotApiUrl: string, data: {
+  requestId: string;
+  fullName: string;
+  phone: string;
+  need: string;
+  plan: string;
+  description: string;
+}) {
+  const response = await fetch(`${requestBotApiUrl}/requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text().catch(() => "");
+    let result: { error?: string } | null = null;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      result = null;
+    }
+
+    const error = new RequestBotError(
+      result?.error || "The NoamWebsites bot could not send the request.",
+    );
+    error.status = response.status;
+    throw error;
+  }
+}
+
+function shouldRetryBotRequest(error: unknown) {
+  if (!(error instanceof RequestBotError)) return true;
+  return [502, 503, 504, 520, 522, 524].includes(error.status ?? 0);
+}
+
 async function notifyDiscord(data: {
   requestId: string;
   fullName: string;
@@ -44,14 +84,12 @@ async function notifyDiscord(data: {
 }) {
   const requestBotApiUrl = await getRequestBotApiUrl();
 
-  const response = await fetch(`${requestBotApiUrl}/requests`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!response.ok) {
-    const result = await response.json().catch(() => null);
-    throw new Error(result?.error || "The NoamWebsites bot could not send the request.");
+  try {
+    await postRequestToBot(requestBotApiUrl, data);
+  } catch (error) {
+    if (!shouldRetryBotRequest(error)) throw error;
+    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    await postRequestToBot(await getRequestBotApiUrl(), data);
   }
 }
 

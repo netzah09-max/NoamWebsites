@@ -191,8 +191,17 @@ const server = http.createServer(async (request, response) => {
     return sendJson(response, 429, { error: "Too many requests. Please try again later." }, origin);
   }
 
+  let body;
   try {
-    const parsed = validateRequest(await readJson(request));
+    body = await readJson(request);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const status = message === "Request body is too large." ? 413 : 400;
+    return sendJson(response, status, { error: status === 413 ? message : "Invalid request body." }, origin);
+  }
+
+  try {
+    const parsed = validateRequest(body);
     if (parsed.error) {
       return sendJson(response, 400, { error: parsed.error }, origin);
     }
