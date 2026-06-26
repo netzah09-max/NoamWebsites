@@ -14,7 +14,7 @@ const REQUEST_BOT_ENDPOINT_FILE =
 async function getRequestBotApiUrl() {
   try {
     const response = await fetch(
-      `${REQUEST_BOT_ENDPOINT_FILE}?v=${Date.now()}`,
+      `${REQUEST_BOT_ENDPOINT_FILE}&v=${Date.now()}`,
       { cache: "no-store" },
     );
     if (!response.ok) throw new Error("Could not read the bot endpoint.");
