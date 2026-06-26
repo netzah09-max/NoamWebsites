@@ -19,6 +19,11 @@ const allowedOrigins = new Set(
 );
 const requestsByIp = new Map();
 const deliveredRequestIds = new Map();
+let gatewaySocket = null;
+let gatewayHeartbeat = null;
+let gatewayReconnectTimer = null;
+let discordReady = false;
+let started = false;
 const rateLimitMax = Math.max(1, Number.parseInt(RATE_LIMIT_MAX, 10) || 5);
 const rateLimitWindowMs = Math.max(
   60_000,
@@ -101,6 +106,97 @@ async function postDiscordMessage(data) {
   }
 }
 
+function clearGatewayHeartbeat() {
+  if (gatewayHeartbeat) {
+    clearInterval(gatewayHeartbeat);
+    gatewayHeartbeat = null;
+  }
+}
+
+function scheduleGatewayReconnect() {
+  if (gatewayReconnectTimer || dryRun || !DISCORD_BOT_TOKEN) return;
+  gatewayReconnectTimer = setTimeout(() => {
+    gatewayReconnectTimer = null;
+    startDiscordPresence();
+  }, 5000);
+}
+
+async function startDiscordPresence() {
+  if (dryRun || !DISCORD_BOT_TOKEN || gatewaySocket) return;
+
+  try {
+    const gatewayResponse = await fetch("https://discord.com/api/v10/gateway/bot", {
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
+    });
+    if (!gatewayResponse.ok) {
+      throw new Error(`Discord gateway returned ${gatewayResponse.status}`);
+    }
+
+    const gateway = await gatewayResponse.json();
+    gatewaySocket = new WebSocket(`${gateway.url}/?v=10&encoding=json`);
+
+    gatewaySocket.addEventListener("message", (event) => {
+      const packet = JSON.parse(event.data);
+
+      if (packet.op === 10) {
+        clearGatewayHeartbeat();
+        gatewayHeartbeat = setInterval(() => {
+          if (gatewaySocket?.readyState === WebSocket.OPEN) {
+            gatewaySocket.send(JSON.stringify({ op: 1, d: null }));
+          }
+        }, packet.d.heartbeat_interval);
+
+        gatewaySocket.send(JSON.stringify({
+          op: 2,
+          d: {
+            token: DISCORD_BOT_TOKEN,
+            intents: 1,
+            properties: {
+              os: "windows",
+              browser: "noamwebsites-bot",
+              device: "noamwebsites-bot",
+            },
+            presence: {
+              status: "online",
+              activities: [{ name: "NoamWebsites requests", type: 3 }],
+              afk: false,
+            },
+          },
+        }));
+        return;
+      }
+
+      if (packet.op === 0 && packet.t === "READY") {
+        discordReady = true;
+        console.log(`NoamWebsites Discord bot online as ${packet.d.user.username}`);
+        return;
+      }
+
+      if (packet.op === 1 && gatewaySocket?.readyState === WebSocket.OPEN) {
+        gatewaySocket.send(JSON.stringify({ op: 1, d: null }));
+      }
+    });
+
+    gatewaySocket.addEventListener("close", () => {
+      discordReady = false;
+      gatewaySocket = null;
+      clearGatewayHeartbeat();
+      scheduleGatewayReconnect();
+    });
+
+    gatewaySocket.addEventListener("error", () => {
+      discordReady = false;
+      clearGatewayHeartbeat();
+    });
+  } catch (error) {
+    discordReady = false;
+    gatewaySocket = null;
+    clearGatewayHeartbeat();
+    console.error("Discord gateway login failed:", error instanceof Error ? error.message : error);
+    scheduleGatewayReconnect();
+  }
+}
+
 function clientIp(request) {
   const forwarded = request.headers["x-forwarded-for"];
   if (typeof forwarded === "string" && forwarded) {
@@ -174,7 +270,12 @@ const server = http.createServer(async (request, response) => {
     return sendJson(
       response,
       200,
-      { ok: true, service: "NoamWebsites Bot", discordConfigured: dryRun || Boolean(DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID) },
+      {
+        ok: true,
+        service: "NoamWebsites Bot",
+        discordConfigured: dryRun || Boolean(DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID),
+        discordOnline: discordReady,
+      },
       origin,
     );
   }
@@ -220,14 +321,22 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-if (require.main === module) {
+function startBot() {
+  if (started) return;
+  started = true;
+  startDiscordPresence();
   server.listen(Number.parseInt(PORT, 10), "0.0.0.0", () => {
     console.log(`NoamWebsites Bot API listening on port ${PORT}`);
   });
 }
 
+if (require.main === module) {
+  startBot();
+}
+
 module.exports = {
   createDiscordPayload,
+  startBot,
   server,
   validateRequest,
 };
