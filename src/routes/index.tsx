@@ -48,7 +48,10 @@ async function postRequestToBot(requestBotApiUrl: string, data: {
 }) {
   const response = await fetch(`${requestBotApiUrl}/requests`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "bypass-tunnel-reminder": "true",
+    },
     body: JSON.stringify(data),
   });
 

@@ -228,7 +228,7 @@ function pruneDeliveredRequests() {
 
 function corsHeaders(origin) {
   const headers = {
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, bypass-tunnel-reminder",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Content-Type": "application/json; charset=utf-8",
     Vary: "Origin",
